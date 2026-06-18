@@ -286,7 +286,14 @@ Usuarios de prueba (semilla): `admin@taller.com` / `AdminPass123`, `mechanic@tal
 
 #### Frontend
 
-> Pendiente de implementación (US-001 frontend). Se documentará en `apps/web` cuando exista.
+```bash
+cd apps/web
+cp .env.local.example .env.local
+npm install
+npm run dev
+```
+
+La aplicación web escucha en `http://localhost:3000`. Las peticiones `/api/*` se reenvían al backend en el puerto 4000.
 
 ---
 
