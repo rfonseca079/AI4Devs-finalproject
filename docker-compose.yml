@@ -1,16 +1,25 @@
+# Development environment (this repo).
+# Production (C:\Despliegues\AI4Devs-finalproject): postgres 5434, web 3000, api 4000.
+# Project name isolates dev volumes/containers from production Docker Compose.
+#
+# PostgreSQL is bound to 127.0.0.1 only (US-011). Credentials below are DEV-only
+# convenience values and must never be used as production secrets.
+
+name: mecatrack-dev
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: mecatrack-postgres
+    container_name: mecatrack-postgres-dev
     restart: unless-stopped
     ports:
-      - '5434:5432'
+      - '127.0.0.1:5435:5432'
     environment:
-      POSTGRES_USER: mecatrack
-      POSTGRES_PASSWORD: mecatrack
-      POSTGRES_DB: mecatrack
+      POSTGRES_USER: ${POSTGRES_USER:-mecatrack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mecatrack}
+      POSTGRES_DB: ${POSTGRES_DB:-mecatrack_dev}
     volumes:
-      - mecatrack_pg_data:/var/lib/postgresql/data
+      - mecatrack_pg_data_dev:/var/lib/postgresql/data
 
 volumes:
-  mecatrack_pg_data:
+  mecatrack_pg_data_dev:

@@ -1,4 +1,4 @@
-import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { User, UserRole } from '@prisma/client';
@@ -25,6 +25,7 @@ describe('AuthService', () => {
     fullName: 'Workshop Mechanic',
     role: UserRole.MECHANIC,
     active: true,
+    sessionVersion: 0,
     refreshTokenHash: null,
     refreshTokenExpiresAt: null,
     createdAt: new Date(),
@@ -79,6 +80,12 @@ describe('AuthService', () => {
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: 'mechanic@taller.com' },
     });
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: activeUser.id,
+        sessionVersion: 0,
+      }),
+    );
     expect(result.accessToken).toBe('access-token');
     expect(result.refreshToken).toBeDefined();
     expect(result.user).toEqual({
@@ -112,7 +119,7 @@ describe('AuthService', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
-  it('throws ForbiddenException for inactive user', async () => {
+  it('throws UnauthorizedException for inactive user', async () => {
     prisma.user.findUnique.mockResolvedValue({
       ...activeUser,
       active: false,
@@ -123,7 +130,7 @@ describe('AuthService', () => {
         email: 'inactive@taller.com',
         password: 'InactivePass123',
       }),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('returns user profile without password hash', async () => {
@@ -140,7 +147,7 @@ describe('AuthService', () => {
     });
   });
 
-  it('clears refresh token on logout', async () => {
+  it('clears refresh token and bumps sessionVersion on logout', async () => {
     prisma.user.update.mockResolvedValue(activeUser);
 
     await authService.logout(activeUser.id);
@@ -150,18 +157,37 @@ describe('AuthService', () => {
       data: {
         refreshTokenHash: null,
         refreshTokenExpiresAt: null,
+        sessionVersion: { increment: 1 },
       },
     });
   });
 
-  it('returns new access token for valid refresh token', async () => {
+  it('rotates refresh token and returns new access token on refresh', async () => {
     const refreshToken = 'valid-refresh-token';
     prisma.user.findFirst.mockResolvedValue(activeUser);
+    prisma.user.update.mockResolvedValue(activeUser);
 
     const result = await authService.refresh(refreshToken);
 
-    expect(prisma.user.findFirst).toHaveBeenCalled();
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: {
+        refreshTokenHash: expect.any(String),
+        active: true,
+        refreshTokenExpiresAt: {
+          gt: expect.any(Date),
+        },
+      },
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: activeUser.id },
+      data: {
+        refreshTokenHash: expect.any(String),
+        refreshTokenExpiresAt: expect.any(Date),
+      },
+    });
     expect(result.accessToken).toBe('access-token');
+    expect(result.refreshToken).toBeDefined();
+    expect(result.refreshToken).not.toBe(refreshToken);
   });
 
   it('throws UnauthorizedException for expired refresh token', async () => {

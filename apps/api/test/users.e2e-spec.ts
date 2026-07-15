@@ -53,13 +53,14 @@ describe('UsersController (e2e)', () => {
   let mechanicAccessToken: string;
   let mechanicUserId: string;
   let adminUserId: string;
+  const runId = `${Date.now()}`;
 
   beforeAll(async () => {
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32-characters';
     process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-characters';
     process.env.JWT_ACCESS_TTL = '15m';
     process.env.JWT_REFRESH_TTL = '7d';
-    process.env.CORS_ORIGIN = 'http://localhost:3000';
+    process.env.CORS_ORIGIN = 'http://localhost:3010';
     process.env.NODE_ENV = 'test';
 
     execSync('npx prisma migrate deploy', {
@@ -137,19 +138,20 @@ describe('UsersController (e2e)', () => {
   });
 
   it('POST /api/users with valid body as ADMIN returns 201', async () => {
+    const email = `new.employee.${runId}@taller.com`;
     const response = await request(app.getHttpServer())
       .post('/api/users')
       .set('Authorization', `Bearer ${adminAccessToken}`)
       .send({
         fullName: 'New Employee',
-        email: 'new.employee@taller.com',
+        email,
         password: 'EmployeePass123',
         role: 'MECHANIC',
       })
       .expect(201);
 
     expect(response.body.active).toBe(true);
-    expect(response.body.email).toBe('new.employee@taller.com');
+    expect(response.body.email).toBe(email);
     expect(response.body.passwordHash).toBeUndefined();
   });
 
@@ -200,7 +202,7 @@ describe('UsersController (e2e)', () => {
       .set('Authorization', `Bearer ${adminAccessToken}`)
       .send({
         fullName: 'To Deactivate',
-        email: 'deactivate.me@taller.com',
+        email: `deactivate.me.${runId}@taller.com`,
         password: 'DeactivatePass123',
         role: 'MECHANIC',
       })
@@ -228,13 +230,13 @@ describe('UsersController (e2e)', () => {
     );
   });
 
-  it('PATCH deactivate last active admin returns 400', async () => {
+  it('PATCH deactivate rejects stale token of deactivated admin', async () => {
     const createResponse = await request(app.getHttpServer())
       .post('/api/users')
       .set('Authorization', `Bearer ${adminAccessToken}`)
       .send({
         fullName: 'Second Admin',
-        email: 'second.admin@taller.com',
+        email: `second.admin.${runId}@taller.com`,
         password: 'SecondAdminPass123',
         role: 'ADMIN',
       })
@@ -245,7 +247,7 @@ describe('UsersController (e2e)', () => {
     const secondAdminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({
-        email: 'second.admin@taller.com',
+        email: `second.admin.${runId}@taller.com`,
         password: 'SecondAdminPass123',
       });
     const secondAdminToken = secondAdminLogin.body.accessToken as string;
@@ -255,14 +257,11 @@ describe('UsersController (e2e)', () => {
       .set('Authorization', `Bearer ${adminAccessToken}`)
       .expect(200);
 
-    const response = await request(app.getHttpServer())
+    // Deactivation bumps sessionVersion; the previous access token is rejected.
+    await request(app.getHttpServer())
       .patch(`/api/users/${adminUserId}/deactivate`)
       .set('Authorization', `Bearer ${secondAdminToken}`)
-      .expect(400);
-
-    expect(response.body.message).toBe(
-      'At least one active administrator is required',
-    );
+      .expect(401);
   });
 
   it('PATCH deactivate unknown id returns 404', async () => {
@@ -278,7 +277,7 @@ describe('UsersController (e2e)', () => {
       .set('Authorization', `Bearer ${adminAccessToken}`)
       .send({
         fullName: 'Double Deactivate',
-        email: 'double.deactivate@taller.com',
+        email: `double.deactivate.${runId}@taller.com`,
         password: 'DoubleDeactivate1',
         role: 'MECHANIC',
       })
@@ -305,7 +304,7 @@ describe('UsersController (e2e)', () => {
       .set('Authorization', `Bearer ${adminAccessToken}`)
       .send({
         fullName: 'Login Blocked',
-        email: 'login.blocked@taller.com',
+        email: `login.blocked.${runId}@taller.com`,
         password: 'LoginBlocked123',
         role: 'MECHANIC',
       })
@@ -321,30 +320,53 @@ describe('UsersController (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({
-        email: 'login.blocked@taller.com',
+        email: `login.blocked.${runId}@taller.com`,
         password: 'LoginBlocked123',
       })
-      .expect(403);
+      .expect(401);
 
-    expect(response.body.message).toBe(
-      'Your account is inactive. Contact the workshop administrator.',
-    );
+    expect(response.body.message).toBe('Invalid email or password');
   });
 
-  it('deactivated user cannot refresh with old cookie', async () => {
+  it('deactivated user loses access and refresh immediately', async () => {
+    const createResponse = await request(app.getHttpServer())
+      .post('/api/users')
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send({
+        fullName: 'Session Revoked',
+        email: `session.revoked.${runId}@taller.com`,
+        password: 'SessionRevoked123',
+        role: 'MECHANIC',
+      })
+      .expect(201);
+
+    const userId = createResponse.body.id as string;
+
     const loginResponse = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({
-        email: 'mechanic@taller.com',
-        password: 'MechanicPass123',
-      });
+        email: `session.revoked.${runId}@taller.com`,
+        password: 'SessionRevoked123',
+      })
+      .expect(200);
 
+    const accessToken = loginResponse.body.accessToken as string;
     const cookies = getSetCookieHeader(loginResponse.headers);
 
     await request(app.getHttpServer())
-      .patch(`/api/users/${mechanicUserId}/deactivate`)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch(`/api/users/${userId}/deactivate`)
       .set('Authorization', `Bearer ${adminAccessToken}`)
       .expect(200);
+
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(401);
 
     await request(app.getHttpServer())
       .post('/api/auth/refresh')

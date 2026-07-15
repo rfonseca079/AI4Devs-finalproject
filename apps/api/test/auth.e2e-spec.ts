@@ -28,7 +28,7 @@ describe('AuthController (e2e)', () => {
     process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-characters';
     process.env.JWT_ACCESS_TTL = '15m';
     process.env.JWT_REFRESH_TTL = '7d';
-    process.env.CORS_ORIGIN = 'http://localhost:3000';
+    process.env.CORS_ORIGIN = 'http://localhost:3010';
     process.env.NODE_ENV = 'test';
 
     execSync('npx prisma migrate deploy', {
@@ -112,11 +112,9 @@ describe('AuthController (e2e)', () => {
         email: 'inactive@taller.com',
         password: 'InactivePass123',
       })
-      .expect(403);
+      .expect(401);
 
-    expect(response.body.message).toBe(
-      'Your account is inactive. Contact the workshop administrator.',
-    );
+    expect(response.body.message).toBe('Invalid email or password');
   });
 
   it('POST /api/auth/login with invalid email format', async () => {
@@ -144,27 +142,56 @@ describe('AuthController (e2e)', () => {
     await request(app.getHttpServer()).get('/api/auth/me').expect(401);
   });
 
-  it('POST /api/auth/refresh with cookie', async () => {
-    const response = await request(app.getHttpServer())
+  it('POST /api/auth/refresh rotates cookie and rejects reuse', async () => {
+    const originalCookies = mechanicCookies;
+
+    const rotated = await request(app.getHttpServer())
       .post('/api/auth/refresh')
-      .set('Cookie', mechanicCookies)
+      .set('Cookie', originalCookies)
       .expect(200);
 
-    expect(response.body.accessToken).toBeDefined();
+    expect(rotated.body.accessToken).toBeDefined();
+    const newCookies = getSetCookieHeader(rotated.headers);
+    expect(newCookies).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(`${REFRESH_COOKIE_NAME}=`),
+      ]),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', originalCookies)
+      .expect(401);
+
+    const secondRefresh = await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', newCookies)
+      .expect(200);
+
+    mechanicCookies = getSetCookieHeader(secondRefresh.headers);
+    mechanicAccessToken = secondRefresh.body.accessToken as string;
   });
 
   it('POST /api/auth/refresh without cookie', async () => {
     await request(app.getHttpServer()).post('/api/auth/refresh').expect(401);
   });
 
-  it('POST /api/auth/logout clears cookie', async () => {
+  it('POST /api/auth/logout clears cookie and invalidates session', async () => {
     await request(app.getHttpServer())
       .post('/api/auth/logout')
       .set('Authorization', `Bearer ${adminAccessToken}`)
       .set('Cookie', adminCookies)
       .expect(204);
 
-    await request(app.getHttpServer()).post('/api/auth/refresh').expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', adminCookies)
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .expect(401);
   });
 });
 
@@ -176,7 +203,7 @@ describe('AuthController rate limiting (e2e)', () => {
     process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-characters';
     process.env.JWT_ACCESS_TTL = '15m';
     process.env.JWT_REFRESH_TTL = '7d';
-    process.env.CORS_ORIGIN = 'http://localhost:3000';
+    process.env.CORS_ORIGIN = 'http://localhost:3010';
     process.env.NODE_ENV = 'test';
 
     const moduleFixture: TestingModule = await Test.createTestingModule({

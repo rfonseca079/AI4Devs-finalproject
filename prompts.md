@@ -111,17 +111,58 @@ R: Que Claude las genere ahora mismo leyendo tu README*
 
 ### 6. Tickets de Trabajo
 
-**Prompt 1:**
+**Prompt 1:*
+#Creación de tickets de backend a partir US
 
-**Prompt 2:**
+/plan-backend-ticket US-001-autenticacion.md
+/plan-backend-ticket @us/US-002-gestion-usuarios.md 
+/plan-backend-ticket @us/US-003-registro-clientes.md 
+/plan-backend-ticket @us/US-004-registro-vehiculos.md
+/plan-backend-ticket @us/US-005-ordenes-trabajo.md
+/plan-backend-ticket para US-006
+/plan-backend-ticket para US-007
+/plan-backend-ticket para US-008
+/plan-backend-ticket para US-009
+*
 
-**Prompt 3:**
+**Prompt 2:*
+/plan-frontend-ticket @us/US-001-autenticacion.md 
+/plan-frontend-ticket para US-002-gestion-usuarios
+/plan-frontend-ticket para US-003-registro-clientes
+/plan-frontend-ticket para US-004-registro-vehiculos
+/plan-frontend-ticket para US-005-ordenes-trabajo
+/plan-frontend-ticket @us/US-006-gestion-tareas.md 
+/plan-frontend-ticket @us/US-007-diagnosticos-reparaciones.md 
+/plan-frontend-ticket @us/US-008-panel-entrega.md 
+/plan-frontend-ticket para @us/US-009-historial.md 
+*
+
+**Prompt 3:*
+/develop-backend US-001_backend.md
+/develop-frontend @docs/plans/US-001_frontend.md 
+/develop-backend @docs/plans/US-002_backend.md
+/develop-frontend @docs/plans/US-002_frontend.md  
+/develop-backend @docs/plans/US-003_backend.md 
+/develop-frontend @docs/plans/US-003_frontend.md
+/develop-backend @docs/plans/US-004_backend.md 
+/develop-frontend @docs/plans/US-004_frontend.md
+/develop-backend @docs/plans/US-005_backend.md
+/develop-frontend @docs/plans/US-005_frontend.md
+/develop-backend @docs/plans/US-006_backend.md
+/develop-frontend @docs/plans/US-006_frontend.md
+/develop-backend @docs/plans/US-007_backend.md
+/develop-frontend @docs/plans/US-007_frontend.md
+/develop-backend @docs/plans/US-008_backend.md
+/develop-frontend @docs/plans/US-008_frontend.md
+/develop-backend @docs/plans/US-009_backend.md
+/develop-frontend @docs/plans/US-009_frontend.md
+*
 
 ---
 
 ### 7. Pull Requests
 
-**Prompt 1:**
+**Prompt 1:*https://github.com/LIDR-academy/AI4Devs-finalproject/pull/198*
 
 **Prompt 2:**
 

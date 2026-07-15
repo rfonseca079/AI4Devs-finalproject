@@ -62,13 +62,10 @@ test.describe('Authentication', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test('inactive user sees inactive message', async ({ page }) => {
-    await page.goto('/login');
-    await page.getByLabel('Correo electrónico').fill('inactive@taller.com');
-    await page.getByLabel('Contraseña').fill('InactivePass123');
-    await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  test('shows session expired banner from query param', async ({ page }) => {
+    await page.goto('/login?session=expired');
     await expect(
-      page.getByRole('alert').filter({ hasText: 'inactiva' }),
-    ).toBeVisible({ timeout: 10_000 });
+      page.getByRole('status').filter({ hasText: 'Tu sesión expiró' }),
+    ).toBeVisible();
   });
 });

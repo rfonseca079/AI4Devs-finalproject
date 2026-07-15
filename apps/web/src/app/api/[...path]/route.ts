@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_ORIGIN = process.env.API_PROXY_TARGET ?? 'http://localhost:4000';
+const API_ORIGIN = process.env.API_PROXY_TARGET ?? 'http://localhost:4010';
 
 async function proxyRequest(
   request: NextRequest,

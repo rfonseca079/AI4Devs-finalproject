@@ -29,6 +29,7 @@ describe('UsersService', () => {
     fullName: 'Workshop Admin',
     role: UserRole.ADMIN,
     active: true,
+    sessionVersion: 0,
     refreshTokenHash: null,
     refreshTokenExpiresAt: null,
     createdAt: new Date('2026-01-01'),
@@ -42,6 +43,7 @@ describe('UsersService', () => {
     fullName: 'Workshop Mechanic',
     role: UserRole.MECHANIC,
     active: true,
+    sessionVersion: 0,
     refreshTokenHash: 'token-hash',
     refreshTokenExpiresAt: new Date('2027-01-01'),
     createdAt: new Date('2026-01-02'),
@@ -186,6 +188,7 @@ describe('UsersService', () => {
           active: false,
           refreshTokenHash: null,
           refreshTokenExpiresAt: null,
+          sessionVersion: { increment: 1 },
         },
       });
       expect(result.active).toBe(false);

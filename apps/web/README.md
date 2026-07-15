@@ -2,20 +2,28 @@
 
 Next.js frontend for MecaTrack (US-001: authentication, US-002: user management, US-003: client registration, US-004: vehicle registration, US-005: work order creation, US-006: work order task management, US-007: technical notes, US-008: delivery panel, US-009: vehicle and client history).
 
+## Development vs production (same machine)
+
+| Service | Development (this repo) | Production (`C:\Despliegues\...`) |
+|---------|-------------------------|-------------------------------------|
+| Web | `http://localhost:3010` | `http://localhost:3000` |
+| API | `http://localhost:4010` | `http://localhost:4000` |
+
 ## Prerequisites
 
 - Node.js 20+
-- US-001 backend running at `http://localhost:4000`
+- US-001 backend running at `http://localhost:4010`
 
 ## Environment
 
 Copy `.env.local.example` to `.env.local`:
 
 ```
-NEXT_PUBLIC_API_URL=http://localhost:3000/api
+NEXT_PUBLIC_API_URL=http://localhost:3010/api
+API_PROXY_TARGET=http://localhost:4010
 ```
 
-API requests are proxied to the backend via `src/app/api/[...path]/route.ts` so refresh cookies work same-origin on port 3000.
+API requests are proxied to the backend via `src/app/api/[...path]/route.ts` so refresh cookies work same-origin on port 3010.
 
 ## Development
 
@@ -24,7 +32,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3010`.
 
 ## Seed users (via API)
 
@@ -39,8 +47,9 @@ Open `http://localhost:3000`.
 1. User submits login form → `POST /api/auth/login`
 2. Access token stored **in memory**; refresh token in `httpOnly` cookie
 3. On app load, `AuthProvider` calls `POST /api/auth/refresh` then `GET /api/auth/me`
-4. On API `401`, `apiClient` retries once after refresh; failure → `/login?session=expired`
-5. Logout → `POST /api/auth/logout` and clear local session
+4. On API `401`, `apiClient` retries once after refresh (rotated httpOnly cookie); failure → `/login?session=expired`
+5. Login shows a session-expired banner when `?session=expired` is present
+6. Logout → `POST /api/auth/logout` and clear local session
 
 ## E2E tests
 

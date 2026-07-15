@@ -119,12 +119,12 @@ test.describe('User management', () => {
     await page.getByRole('button', { name: 'Desactivar' }).last().click();
     await expect(page.getByText('Usuario desactivado correctamente')).toBeVisible();
 
-    const response = await request.post('http://localhost:4000/api/auth/login', {
+    const response = await request.post('http://localhost:4010/api/auth/login', {
       data: { email: uniqueEmail, password },
     });
 
-    expect(response.status()).toBe(403);
+    expect(response.status()).toBe(401);
     const body = (await response.json()) as { message?: string };
-    expect(body.message).toMatch(/inactive/i);
+    expect(body.message).toBe('Invalid email or password');
   });
 });

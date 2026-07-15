@@ -2,7 +2,7 @@ import { clearAccessToken, getAccessToken, setAccessToken } from './tokenStore';
 import { parseApiError } from './apiError';
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/api';
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3010/api';
 
 let refreshPromise: Promise<boolean> | null = null;
 

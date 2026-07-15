@@ -2,6 +2,16 @@
 
 NestJS REST API for MecaTrack workshop management (US-001: authentication, US-002: user management, US-003: client registration, US-004: vehicle registration, US-005: work order creation, US-006: work order task management, US-007: technical notes, US-008: delivery panel, US-009: vehicle and client history).
 
+## Development vs production (same machine)
+
+This repository is **development**. Production lives at `C:\Despliegues\AI4Devs-finalproject` and keeps the original ports.
+
+| Service | Development (this repo) | Production |
+|---------|-------------------------|------------|
+| Web | `http://localhost:3010` | `http://localhost:3000` |
+| API | `http://localhost:4010/api` | `http://localhost:4000/api` |
+| PostgreSQL | `localhost:5435` / `mecatrack_dev` | `localhost:5434` / `mecatrack` |
+
 ## Prerequisites
 
 - Node.js 20+
@@ -18,9 +28,32 @@ Copy `.env.example` to `.env`:
 | `JWT_REFRESH_SECRET` | Secret for refresh token signing (reserved) |
 | `JWT_ACCESS_TTL` | Access token TTL (default `15m`) |
 | `JWT_REFRESH_TTL` | Refresh token TTL (default `7d`) |
-| `PORT` | API port (default `4000`) |
-| `CORS_ORIGIN` | Frontend origin (default `http://localhost:3000`) |
+| `PORT` | API port (default `4010` in this repo) |
+| `CORS_ORIGIN` | Frontend origin (default `http://localhost:3010`) |
 | `NODE_ENV` | `development` or `production` |
+| `ALLOW_DESTRUCTIVE_DB_OPS` | Must be `true` to run destructive Prisma cleanup scripts (never in production) |
+| `ENFORCE_SECURE_CONFIG` | When `true`, applies production-strict secret validation even in development |
+| `ENABLE_ADMIN_BOOTSTRAP` | Opt-in one-time first-admin creation on empty DB (`true` required) |
+| `BOOTSTRAP_ADMIN_EMAIL` | First admin email when bootstrap is enabled |
+| `BOOTSTRAP_ADMIN_PASSWORD` | First admin password when bootstrap is enabled (min 8 chars) |
+| `BOOTSTRAP_ADMIN_NAME` | First admin full name when bootstrap is enabled |
+
+### Production / strict secret validation (US-011)
+
+When `NODE_ENV=production` or `ENFORCE_SECURE_CONFIG=true`, API startup fails fast unless:
+
+- `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` are present, ≥ 32 characters, and not committed placeholders
+- `DATABASE_URL` includes a non-trivial database password
+
+Development may keep local placeholders. Never reuse `change-me-*`, Docker example JWT defaults, or password `mecatrack` in production.
+
+PostgreSQL in this repo binds to `127.0.0.1:5435` only. A hardened production compose example (not live) lives at `docker-compose.production.example.yml`.
+
+### HTTP and runtime hardening (US-014)
+
+- Login failures for wrong credentials and inactive accounts both return HTTP `401` with `Invalid email or password` (no account-state enumeration).
+- The API uses `helmet` security headers. Set `ENABLE_HSTS=true` only when the site is served over HTTPS.
+- `apps/api/Dockerfile` runs the API process as non-root user `nestjs` (uid 1001).
 
 ## Local setup
 
@@ -40,7 +73,7 @@ npx prisma db seed
 npm run dev
 ```
 
-API base URL: `http://localhost:4000/api`
+API base URL: `http://localhost:4010/api`
 
 ## Seed users (development only)
 
@@ -50,13 +83,61 @@ API base URL: `http://localhost:4000/api`
 | `mechanic@taller.com` | `MechanicPass123` | MECHANIC |
 | `inactive@taller.com` | `InactivePass123` | MECHANIC (inactive) |
 
+Demo data is loaded **only** with an explicit command:
+
+```bash
+npm run db:seed:dev
+# or
+npx prisma db seed
+```
+
+`db:seed:dev` is blocked when `NODE_ENV=production`. Re-running seed preserves existing user password hashes (demo passwords apply on create only).
+
+### Database startup flows (US-010)
+
+| Flow | Command | When |
+|------|---------|------|
+| Migrate | `npm run db:migrate:deploy` | Schema only (safe for production startup) |
+| Bootstrap first admin | `npm run db:bootstrap:admin` | Empty `User` table only; requires `ENABLE_ADMIN_BOOTSTRAP=true` + `BOOTSTRAP_ADMIN_*` |
+| Dev seed | `npm run db:seed:dev` | Development/test sample data only |
+| Container startup | `docker-entrypoint.sh` | Migrates, optionally bootstraps, **never** runs seed |
+
+`apps/api/docker-entrypoint.sh` is the production-safe startup template: migrate → optional bootstrap → start API. It never executes development seed.
+
+## Destructive database cleanup (development/test only)
+
+The script `prisma/clean-db-admin-only.ts` deletes business data and non-admin users. It keeps `admin@taller.com` when present and **does not reset** the admin password.
+
+Safety gates (all required):
+
+1. `NODE_ENV` must **not** be `production`
+2. `ALLOW_DESTRUCTIVE_DB_OPS=true`
+3. Explicit confirmation flag: `--confirm` (or `--yes`)
+
+Before mutating, the script prints a sanitized target summary (`host`, `port`, `database`, `NODE_ENV`) without credentials.
+
+Example (from `apps/api`, against the development database only):
+
+```bash
+# Windows PowerShell
+$env:ALLOW_DESTRUCTIVE_DB_OPS='true'
+npm run db:clean:destructive -- --confirm
+```
+
+```bash
+# bash
+ALLOW_DESTRUCTIVE_DB_OPS=true npm run db:clean:destructive -- --confirm
+```
+
+This script must never be used against production.
+
 ## Auth endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/auth/login` | Login; returns `accessToken` + sets `refreshToken` httpOnly cookie |
-| `POST` | `/api/auth/refresh` | New access token from refresh cookie |
-| `POST` | `/api/auth/logout` | Revoke refresh token (Bearer required) |
+| `POST` | `/api/auth/refresh` | Rotates refresh cookie and returns a new `accessToken` |
+| `POST` | `/api/auth/logout` | Revokes refresh token and bumps `sessionVersion` (Bearer required) |
 | `GET` | `/api/auth/me` | Current user profile (Bearer required) |
 
 ## User management (US-002, admin only)
@@ -67,9 +148,9 @@ All `/api/users` routes require a valid Bearer token with role `ADMIN`. Mechanic
 |--------|------|-------------|
 | `GET` | `/api/users` | List all users (active first, then by name) |
 | `POST` | `/api/users` | Create active employee (`ADMIN` or `MECHANIC`) |
-| `PATCH` | `/api/users/:id/deactivate` | Soft-deactivate user and revoke refresh tokens |
+| `PATCH` | `/api/users/:id/deactivate` | Soft-deactivate user, revoke refresh tokens, and bump `sessionVersion` |
 
-Deactivated users cannot log in or refresh sessions. The last active administrator cannot be deactivated. Admins cannot deactivate their own account.
+Access JWTs include `sessionVersion`. Protected routes re-check the user in the database and reject tokens when the user is inactive or the version no longer matches. Refresh tokens rotate on every successful `POST /auth/refresh`; reusing the previous cookie returns `401`. Deactivated users cannot log in or refresh sessions. The last active administrator cannot be deactivated. Admins cannot deactivate their own account. A future role-change endpoint should bump `sessionVersion` the same way as deactivation.
 
 OpenAPI fragment: [`docs/api-spec.users.yml`](../../docs/api-spec.users.yml)
 
@@ -317,4 +398,4 @@ OpenAPI fragment: [`docs/api-spec.history.yml`](../../docs/api-spec.history.yml)
 
 ## Database port
 
-Docker maps PostgreSQL to host port **5434** (to avoid conflicts with local PostgreSQL on 5432/5433).
+Docker maps PostgreSQL to host port **5435** in development (`mecatrack-postgres-dev`). Production uses **5434**.
