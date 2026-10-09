@@ -1,7 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as cookieParser from 'cookie-parser';
-import { execSync } from 'child_process';
+import { migrateAndPrepareTestDatabase } from './prepare-e2e-database';
 import 'dotenv/config';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -56,16 +56,7 @@ describe('AuthController (e2e)', () => {
   beforeAll(async () => {
     applyAuthTestEnv();
 
-    execSync('npx prisma migrate deploy', {
-      cwd: process.cwd(),
-      stdio: 'inherit',
-      env: process.env,
-    });
-    execSync('npx prisma db seed', {
-      cwd: process.cwd(),
-      stdio: 'inherit',
-      env: process.env,
-    });
+    migrateAndPrepareTestDatabase();
 
     app = await createAuthApp();
 
@@ -283,6 +274,7 @@ describe('AuthController rate limiting (e2e)', () => {
 
   beforeAll(async () => {
     applyAuthTestEnv();
+    delete process.env.TRUSTED_PROXY_IPS;
     app = await createAuthApp();
   });
 
@@ -310,5 +302,78 @@ describe('AuthController rate limiting (e2e)', () => {
       .expect(429);
 
     expect(response.body.message).toBe('Too Many Requests');
+  });
+
+  it('POST /api/auth/login ignores a spoofed X-Forwarded-For on a direct connection', async () => {
+    const direct = await createAuthApp();
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await request(direct.getHttpServer())
+          .post('/api/auth/login')
+          .set('X-Forwarded-For', `203.0.113.${attempt + 1}`)
+          .send({
+            email: 'mechanic@taller.com',
+            password: 'WrongPassword123',
+          })
+          .expect(401);
+      }
+
+      await request(direct.getHttpServer())
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', '203.0.113.99')
+        .send({
+          email: 'mechanic@taller.com',
+          password: 'WrongPassword123',
+        })
+        .expect(429);
+    } finally {
+      await direct.close();
+    }
+  });
+});
+
+describe('AuthController proxy rate limiting (e2e)', () => {
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    applyAuthTestEnv();
+    process.env.TRUSTED_PROXY_IPS = '127.0.0.1,::1';
+    app = await createAuthApp();
+  });
+
+  afterAll(async () => {
+    delete process.env.TRUSTED_PROXY_IPS;
+    await app.close();
+  });
+
+  it('POST /api/auth/login counts two proxied clients separately', async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', '203.0.113.10')
+        .send({
+          email: 'mechanic@taller.com',
+          password: 'WrongPassword123',
+        })
+        .expect(401);
+    }
+
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '203.0.113.10')
+      .send({
+        email: 'mechanic@taller.com',
+        password: 'WrongPassword123',
+      })
+      .expect(429);
+
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '203.0.113.11')
+      .send({
+        email: 'mechanic@taller.com',
+        password: 'WrongPassword123',
+      })
+      .expect(401);
   });
 });

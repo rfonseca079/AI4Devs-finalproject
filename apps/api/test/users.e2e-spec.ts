@@ -1,7 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as cookieParser from 'cookie-parser';
-import { execSync } from 'child_process';
+import { migrateAndPrepareTestDatabase } from './prepare-e2e-database';
 import 'dotenv/config';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -63,16 +63,7 @@ describe('UsersController (e2e)', () => {
     process.env.CORS_ORIGIN = 'http://localhost:3000';
     process.env.NODE_ENV = 'test';
 
-    execSync('npx prisma migrate deploy', {
-      cwd: process.cwd(),
-      stdio: 'inherit',
-      env: process.env,
-    });
-    execSync('npx prisma db seed', {
-      cwd: process.cwd(),
-      stdio: 'inherit',
-      env: process.env,
-    });
+    migrateAndPrepareTestDatabase();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -524,12 +515,12 @@ describe('UsersController (e2e)', () => {
       expect(updated).not.toBeNull();
       expect(updated!.refreshTokenHash).toBeNull();
       expect(updated!.refreshTokenExpiresAt).toBeNull();
-      expect(await bcrypt.compare('BrandNewPass99', updated!.passwordHash)).toBe(
-        true,
-      );
-      expect(await bcrypt.compare('OriginalPass12', updated!.passwordHash)).toBe(
-        false,
-      );
+      expect(
+        await bcrypt.compare('BrandNewPass99', updated!.passwordHash),
+      ).toBe(true);
+      expect(
+        await bcrypt.compare('OriginalPass12', updated!.passwordHash),
+      ).toBe(false);
     } finally {
       await prisma.$disconnect();
     }

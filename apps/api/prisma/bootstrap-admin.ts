@@ -35,7 +35,7 @@ export async function runAdminBootstrap(): Promise<void> {
 
   const passwordHash = await bcrypt.hash(credentials.password, 12);
 
-  const admin = await prisma.user.create({
+  await prisma.user.create({
     data: {
       email: credentials.email,
       passwordHash,
@@ -45,7 +45,7 @@ export async function runAdminBootstrap(): Promise<void> {
     },
   });
 
-  console.log(`Admin bootstrap completed for ${admin.email}`);
+  console.log('Admin bootstrap completed.');
 }
 
 async function main(): Promise<void> {

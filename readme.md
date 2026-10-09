@@ -358,35 +358,26 @@ Se puede ver un video del proyecto corriendo en: \docs\Diseño y experiencia de 
 
 #### Despliegue completo con Docker (recomendado)
 
-No necesitas Node.js ni terminal para el día a día: con Docker Desktop puedes levantar **PostgreSQL, API y frontend** con un solo comando o desde la interfaz gráfica.
+No necesitas Node.js ni terminal para el día a día: con Docker Desktop puedes levantar **PostgreSQL, API y frontend**.
 
-Desde la raíz del repositorio:
+Desde la raíz del repositorio, copia el ejemplo de variables y luego levanta el stack. Cada despliegue elige sus propios puertos publicados (`WEB_PORT` y el puerto de Postgres en Compose); los números de un equipo no son un requisito del producto.
 
 ```bash
+copy .env.docker.example .env
 docker compose up -d --build
 ```
 
-O en **Docker Desktop**: *Open* el proyecto → pestaña *Compose* → **Start**.
+En Linux o macOS, el equivalente del primer comando es `cp .env.docker.example .env`.
 
-Cuando los contenedores estén en verde:
+O en **Docker Desktop**: *Open* el proyecto → pestaña *Compose* → **Start**, después de crear `.env`.
 
-| Servicio | URL |
-|----------|-----|
-| **Aplicación web** | http://localhost:3000 |
-| PostgreSQL (opcional, depuración) | `localhost:5434` |
+El contenedor `api` aplica las migraciones al arrancar y **no** carga datos de prueba. El primer administrador es opcional: solo si `ENABLE_ADMIN_BOOTSTRAP=true`, las tres variables `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` y `BOOTSTRAP_ADMIN_NAME` están definidas, y la tabla de usuarios está vacía. Con el flag en `false` no se crea ningún usuario. `admin@taller.com` / `AdminPass123` y `mechanic@taller.com` / `MechanicPass123` no aparecen en una instalación nueva ni en producción.
 
-La primera vez, el contenedor `api` aplica migraciones y carga datos de prueba automáticamente.
-
-**Usuarios de prueba:**
-
-| Email | Contraseña | Rol |
-|-------|------------|-----|
-| `admin@taller.com` | `AdminPass123` | Administrador |
-| `mechanic@taller.com` | `MechanicPass123` | Mecánico |
+En producción (`NODE_ENV=production`, que es como arranca el servicio `api`) la API no escucha si la configuración es inválida. Exige secretos JWT de al menos 32 caracteres que no sean placeholders `change-me-*` ni `mecatrack-docker-*`, y una contraseña de base de datos distinta de `mecatrack`, `postgres` y `password`. Ese fallo es `Invalid production configuration` y termina el proceso antes de abrir el puerto. Si Postgres no responde, el error es posterior y distinto.
 
 Para detener todo: `docker compose down` (los datos persisten en el volumen `mecatrack_pg_data`).
 
-Variables JWT opcionales: copia `.env.docker.example` a `.env` en la raíz si quieres personalizar secretos.
+El perfil `observability` (Grafana) no arranca con el comando de arriba. Antes de usarlo hay que definir `GRAFANA_ADMIN_PASSWORD` en `.env`.
 
 #### Acceso desde la red WiFi (móvil, tablet u otro PC)
 
@@ -402,8 +393,8 @@ Los dispositivos en la misma red pueden usar MecaTrack si apuntan a la **IP loca
    ```
    http://192.168.1.42:3000
    ```
-   (sustituye por tu IP real).
-4. **Firewall de Windows**: si no carga, permite conexiones entrantes en el puerto **3000** (Panel de control → Firewall → Reglas de entrada → puerto TCP 3000).
+   (sustituye la IP y usa el puerto publicado de la web; `3000` es solo un ejemplo si `WEB_PORT` no se cambió).
+4. **Firewall de Windows**: si no carga, permite conexiones entrantes en el puerto TCP que publique la web.
 
 Requisitos: el PC con Docker y el dispositivo cliente deben estar en la **misma red WiFi**. Tras cambiar la configuración de red, reconstruye el frontend una vez: `docker compose up -d --build web`.
 
@@ -420,7 +411,9 @@ npm install
 npm run dev
 ```
 
-Abre `http://localhost:3000` (requiere la API en ejecución).
+Abre la URL del frontend de ese entorno (requiere la API en ejecución). El puerto lo elige quien lo arranca.
+
+Las cuentas `admin@taller.com` / `AdminPass123`, `mechanic@taller.com` / `MechanicPass123` e `inactive@taller.com` / `InactivePass123` existen solo en desarrollo y en pruebas, nunca como acceso de una instalación nueva ni de producción. En desarrollo se crean con `npm run db:seed:dev` dentro de `apps/api` (ese comando no corre si `NODE_ENV=production` y no cambia la contraseña de un usuario que ya existe). Para las pruebas de API, `npm run db:prepare:test` vacía y vuelve a sembrar únicamente una base cuyo nombre contiene `test`. Playwright no prepara esa base y no debe apuntar a producción.
 
 ---
 
@@ -618,8 +611,8 @@ flowchart LR
     User[Navegador del usuario]
 
     subgraph Host [Host local]
-        Web[Contenedor web\nNext.js standalone\npuerto 3000]
-        PG[Contenedor postgres\nPostgreSQL 16\npuerto host 5434]
+        Web[Contenedor web\nNext.js standalone\npuerto WEB_PORT]
+        PG[Contenedor postgres\nPostgreSQL 16\npuerto de host en Compose]
         Prom[Prometheus opcional\n127.0.0.1:9090]
         Graf[Grafana opcional\n127.0.0.1:3001]
     end
@@ -644,7 +637,7 @@ flowchart LR
 
 | Componente | Implementación actual | Función en el despliegue |
 |------------|------------------------|---------------------------|
-| **Frontend** | Contenedor `mecatrack-web` construido desde `apps/web/Dockerfile` | Sirve la aplicación Next.js en modo `standalone`, expuesta al host por el puerto `3000` (o `WEB_PORT` si se sobreescribe) |
+| **Frontend** | Contenedor `mecatrack-web` construido desde `apps/web/Dockerfile` | Sirve la aplicación Next.js en modo `standalone`, expuesta al host por `WEB_PORT` (en este Compose el valor de ejemplo es `3000`) |
 | **Backend** | Contenedor `mecatrack-api` construido desde `apps/api/Dockerfile` | Expone la API NestJS dentro de la red Docker, aplica reglas de negocio, autenticación y acceso a datos |
 | **Base de datos** | Contenedor `mecatrack-postgres` con imagen `postgres:16-alpine` | Almacena usuarios, clientes, vehículos, órdenes de trabajo, tareas e historial en la BD `mecatrack` |
 | **Persistencia** | Volumen Docker `mecatrack_pg_data` | Conserva los datos de PostgreSQL entre reinicios o recreaciones de contenedores |
@@ -653,7 +646,7 @@ flowchart LR
 
 #### Proceso de despliegue actual
 
-El despliegue productivo se levanta desde un `docker-compose.yml` que construye y arranca `postgres`, `api` y `web`. PostgreSQL se inicia primero, publica el puerto `5434` **solo en `127.0.0.1`** y declara un `healthcheck` con `pg_isready`. La API depende de que la base esté saludable, declara un `healthcheck` contra `GET /api/health/ready` (US-O1) y recibe por variables de entorno (archivo `.env` del host, sin fallbacks inseguros) la cadena `DATABASE_URL`, los secretos JWT y los tiempos de expiración de sesión.
+El despliegue productivo se levanta desde un `docker-compose.yml` que construye y arranca `postgres`, `api` y `web`. PostgreSQL se inicia primero, publica su puerto **solo en `127.0.0.1`** (en este archivo el puerto de host de ejemplo es `5434`) y declara un `healthcheck` con `pg_isready`. La API depende de que la base esté saludable, declara un `healthcheck` contra `GET /api/health/ready` (US-O1) y recibe por variables de entorno (archivo `.env` del host, sin fallbacks inseguros) la cadena `DATABASE_URL`, los secretos JWT y los tiempos de expiración de sesión.
 
 Para métricas, dashboards y alertas (US-O2 … US-O5), define `GRAFANA_ADMIN_PASSWORD` en el `.env` del host y ejecuta:
 
@@ -665,16 +658,16 @@ Prometheus: http://127.0.0.1:9090 · Grafana: http://127.0.0.1:3001 (loopback). 
 
 La imagen de la API se construye en múltiples etapas: instala dependencias, genera el cliente Prisma, compila NestJS y artefactos de bootstrap/seed opcionales. Al arrancar, `docker-entrypoint.sh` ejecuta `prisma migrate deploy`, puede correr un **bootstrap de admin opcional** solo si `ENABLE_ADMIN_BOOTSTRAP=true` (BD vacía), **no ejecuta el seed de desarrollo**, e inicia la aplicación como usuario no privilegiado (`nestjs`).
 
-El frontend también se construye en múltiples etapas y se publica como aplicación Next.js `standalone`. Su contenedor no llama al backend por `localhost`, sino por la variable `API_PROXY_TARGET=http://api:4000`, lo que mantiene la comunicación dentro de la red interna de Docker. Hacia el navegador, el frontend publica el puerto `3000` y resuelve las llamadas a `/api/*` como proxy al contenedor `api`, manteniendo una única URL de acceso para el usuario final.
+El frontend también se construye en múltiples etapas y se publica como aplicación Next.js `standalone`. Su contenedor no llama al backend por `localhost`, sino por la variable `API_PROXY_TARGET=http://api:4000`, lo que mantiene la comunicación dentro de la red interna de Docker. Hacia el navegador, el frontend publica el puerto que elija el despliegue (`WEB_PORT`) y resuelve las llamadas a `/api/*` como proxy al contenedor `api`, manteniendo una única URL de acceso para el usuario final.
 
 #### Separación entre desarrollo y producción
 
-En la operación actual existen dos configuraciones distintas. **Producción** utiliza el stack completo con `postgres` + `api` + `web`, expuesto en `127.0.0.1:5434` y `3000`. En cambio, esta copia de **desarrollo** usa un `docker-compose.yml` aislado con `name: mecatrack-dev` y solo levanta PostgreSQL en `127.0.0.1:5435`, precisamente para no interferir con el entorno productivo local. La API y el frontend de desarrollo se ejecutan por separado cuando se necesitan pruebas locales.
+**Producción** levanta `postgres`, `api` y `web`: migraciones automáticas y bootstrap de administrador solo si el flag está activo. No ejecuta el seed. **Desarrollo** puede usar un Postgres aparte y arrancar API y frontend con npm; el seed de demostración es un comando explícito y no forma parte del arranque. Los puertos publicados los define cada Compose o cada `.env`. Un ejemplo posible es la web en el puerto `3000` y Postgres solo en `127.0.0.1`; no son puertos obligatorios del producto.
 
 #### Consideraciones operativas
 
-- El puerto **`3000`** es la entrada principal del sistema para el usuario final; la API no se expone directamente al host en el despliegue productivo actual.
-- El puerto **`5434`** queda bound a **localhost** para herramientas locales (pgAdmin/DBeaver); no debe publicarse en todas las interfaces.
+- La entrada del usuario final es el puerto publicado de la web (`WEB_PORT`). La API no se expone directamente al host en el Compose de este repositorio.
+- El puerto de Postgres publicado en el host queda bound a **127.0.0.1** para herramientas locales (pgAdmin/DBeaver); no debe publicarse en todas las interfaces. El número de puerto lo elige el despliegue.
 - El puerto **`9090`** (Prometheus) y **`3001`** (Grafana), con profile `observability`, quedan bound a **`127.0.0.1`**; no son necesarios para el flujo diario del taller.
 - El volumen **`mecatrack_pg_data`** es crítico: ahí persisten los datos reales aunque el contenedor de PostgreSQL se reinicie o se recree.
 - La API depende de PostgreSQL con validación de salud, pero el frontend solo depende del contenedor `api` a nivel de arranque; por ello, un fallo del backend impacta inmediatamente las rutas `/api` aunque el frontend siga respondiendo HTML.
@@ -1742,5 +1735,5 @@ Esta sección resume tres tickets técnicos representativos del desarrollo de Me
 
 **Pull Request 2* https://github.com/LIDR-academy/AI4Devs-finalproject/pull/301*
 
-**Pull Request 3**
+**Pull Request 3** https://github.com/LIDR-academy/AI4Devs-finalproject/pull/311
 

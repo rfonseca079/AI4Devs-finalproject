@@ -76,3 +76,23 @@ export function assertNotProductionSeed(nodeEnv: string | undefined): void {
     );
   }
 }
+
+export function assertTestDatabaseName(databaseUrl: string | undefined): void {
+  if (!databaseUrl || databaseUrl.trim().length === 0) {
+    throw new DevSeedError('DATABASE_URL is required');
+  }
+
+  let database = '';
+  try {
+    const parsed = new URL(databaseUrl);
+    database = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
+  } catch {
+    throw new DevSeedError('DATABASE_URL is invalid');
+  }
+
+  if (!database.toLowerCase().includes('test')) {
+    throw new DevSeedError(
+      'Test database preparer requires a database name containing "test"',
+    );
+  }
+}

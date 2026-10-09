@@ -24,6 +24,7 @@
     "prisma:seed": "prisma db seed",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed:dev": "ts-node prisma/seed-dev.ts",
+    "db:prepare:test": "ts-node prisma/prepare-test-db.ts",
     "db:bootstrap:admin": "ts-node prisma/bootstrap-admin.ts",
     "db:clean:destructive": "ts-node prisma/clean-db-admin-only.ts"
   },

@@ -40,7 +40,17 @@ services:
       NODE_ENV: production
       CORS_ORIGIN: http://localhost:3000
       COOKIE_SECURE: 'false'
+      # Strict mode (NODE_ENV=production) rejects JWT secrets shorter than 32
+      # characters, change-me-* and mecatrack-docker-* placeholders, and a
+      # DATABASE_URL password of mecatrack, postgres, or password. That failure
+      # is "Invalid production configuration" and exits before listen. An
+      # unreachable Postgres error happens later and is a different failure.
       ENABLE_ADMIN_BOOTSTRAP: ${ENABLE_ADMIN_BOOTSTRAP:-false}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-}
+      # Login throttling trusts X-Forwarded-For only from this Compose service.
+      TRUSTED_PROXY_HOSTS: web
       ENABLE_HSTS: ${ENABLE_HSTS:-false}
     healthcheck:
       test:
@@ -87,6 +97,9 @@ services:
     depends_on:
       - api
 
+  # Do not start `--profile observability` until GRAFANA_ADMIN_PASSWORD is set.
+  # Compose interpolates this file even when the profile is off, so this
+  # password must not use `:?`. It has no default password.
   grafana:
     image: grafana/grafana:11.2.0
     container_name: mecatrack-grafana
@@ -94,7 +107,7 @@ services:
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_SERVER_ROOT_URL: http://127.0.0.1:3001
       GF_PATHS_PROVISIONING: /etc/grafana/provisioning

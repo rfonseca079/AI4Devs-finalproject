@@ -2,6 +2,7 @@ import {
   AdminBootstrapError,
   DevSeedError,
   assertNotProductionSeed,
+  assertTestDatabaseName,
   assertUserTableEmpty,
   shouldRunAdminBootstrap,
   validateAdminBootstrapEnv,
@@ -106,6 +107,30 @@ describe('admin-bootstrap', () => {
       expect(() => assertNotProductionSeed('production')).toThrow(DevSeedError);
       expect(() => assertNotProductionSeed('production')).toThrow(
         /not allowed when NODE_ENV=production/,
+      );
+    });
+  });
+
+  describe('assertTestDatabaseName', () => {
+    it('should allow a database name that contains test', () => {
+      expect(() =>
+        assertTestDatabaseName(
+          'postgresql://user:secret@localhost:5435/mecatrack_test',
+        ),
+      ).not.toThrow();
+    });
+
+    it('should reject a database name that is not a test database', () => {
+      expect(() =>
+        assertTestDatabaseName(
+          'postgresql://user:secret@localhost:5435/mecatrack_dev',
+        ),
+      ).toThrow(/database name containing "test"/);
+    });
+
+    it('should reject a missing database url without connecting', () => {
+      expect(() => assertTestDatabaseName(undefined)).toThrow(
+        /DATABASE_URL is required/,
       );
     });
   });
